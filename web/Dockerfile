@@ -25,7 +25,7 @@ COPY package.json pnpm-lock.yaml /app/web/
 
 # Use packageManager from package.json
 RUN corepack install
-
+RUN pnpm config set strict-ssl false
 RUN pnpm install --frozen-lockfile
 
 # build resources
@@ -35,6 +35,7 @@ COPY --from=packages /app/web/ .
 COPY . .
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 RUN pnpm build:docker
 
 

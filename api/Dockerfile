@@ -64,7 +64,7 @@ RUN \
         curl \
         gnupg \
     && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg \
+    && curl -kfsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg \
     && gpg --show-keys --with-colons /tmp/nodesource.gpg \
         | awk -F: '/^fpr:/ {print $10}' \
         | grep -Fx "${NODESOURCE_KEY_FPR}" \
@@ -72,9 +72,9 @@ RUN \
     && rm -f /tmp/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
         > /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update \
+    && apt-get -o Acquire::https::Verify-Peer=false update \
     # Install dependencies
-    && apt-get install -y --no-install-recommends \
+    && apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends \
         # basic environment
         nodejs=${NODE_PACKAGE_VERSION} \
         # for gmpy2 \
