@@ -5,13 +5,14 @@
 # ==================================================================
 
 x-shared-env: &shared-api-worker-env
-  CONSOLE_API_URL: ${CONSOLE_API_URL:-}
-  CONSOLE_WEB_URL: ${CONSOLE_WEB_URL:-}
-  SERVICE_API_URL: ${SERVICE_API_URL:-}
+  DIFY_DOMAIN: ${DIFY_DOMAIN:-dify.example.com}
+  CONSOLE_API_URL: ${CONSOLE_API_URL:-https://${DIFY_DOMAIN}}
+  CONSOLE_WEB_URL: ${CONSOLE_WEB_URL:-https://${DIFY_DOMAIN}}
+  SERVICE_API_URL: ${SERVICE_API_URL:-https://${DIFY_DOMAIN}}
   TRIGGER_URL: ${TRIGGER_URL:-http://localhost}
-  APP_API_URL: ${APP_API_URL:-}
-  APP_WEB_URL: ${APP_WEB_URL:-}
-  FILES_URL: ${FILES_URL:-}
+  APP_API_URL: ${APP_API_URL:-https://${DIFY_DOMAIN}}
+  APP_WEB_URL: ${APP_WEB_URL:-https://${DIFY_DOMAIN}}
+  FILES_URL: ${FILES_URL:-https://${DIFY_DOMAIN}}
   INTERNAL_FILES_URL: ${INTERNAL_FILES_URL:-}
   LANG: ${LANG:-C.UTF-8}
   LC_ALL: ${LC_ALL:-C.UTF-8}
@@ -544,22 +545,6 @@ x-shared-env: &shared-api-worker-env
   OPENSEARCH_MEMLOCK_HARD: ${OPENSEARCH_MEMLOCK_HARD:--1}
   OPENSEARCH_NOFILE_SOFT: ${OPENSEARCH_NOFILE_SOFT:-65536}
   OPENSEARCH_NOFILE_HARD: ${OPENSEARCH_NOFILE_HARD:-65536}
-  NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
-  NGINX_HTTPS_ENABLED: ${NGINX_HTTPS_ENABLED:-false}
-  NGINX_PORT: ${NGINX_PORT:-80}
-  NGINX_SSL_PORT: ${NGINX_SSL_PORT:-443}
-  NGINX_SSL_CERT_FILENAME: ${NGINX_SSL_CERT_FILENAME:-dify.crt}
-  NGINX_SSL_CERT_KEY_FILENAME: ${NGINX_SSL_CERT_KEY_FILENAME:-dify.key}
-  NGINX_SSL_PROTOCOLS: ${NGINX_SSL_PROTOCOLS:-TLSv1.2 TLSv1.3}
-  NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-auto}
-  NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-100M}
-  NGINX_KEEPALIVE_TIMEOUT: ${NGINX_KEEPALIVE_TIMEOUT:-65}
-  NGINX_PROXY_READ_TIMEOUT: ${NGINX_PROXY_READ_TIMEOUT:-3600s}
-  NGINX_PROXY_SEND_TIMEOUT: ${NGINX_PROXY_SEND_TIMEOUT:-3600s}
-  NGINX_ENABLE_CERTBOT_CHALLENGE: ${NGINX_ENABLE_CERTBOT_CHALLENGE:-false}
-  CERTBOT_EMAIL: ${CERTBOT_EMAIL:-your_email@example.com}
-  CERTBOT_DOMAIN: ${CERTBOT_DOMAIN:-your_domain.com}
-  CERTBOT_OPTIONS: ${CERTBOT_OPTIONS:-}
   SSRF_HTTP_PORT: ${SSRF_HTTP_PORT:-3128}
   SSRF_COREDUMP_DIR: ${SSRF_COREDUMP_DIR:-/var/spool/squid}
   SSRF_REVERSE_PROXY_PORT: ${SSRF_REVERSE_PROXY_PORT:-8194}
@@ -571,8 +556,8 @@ x-shared-env: &shared-api-worker-env
   SSRF_POOL_MAX_CONNECTIONS: ${SSRF_POOL_MAX_CONNECTIONS:-100}
   SSRF_POOL_MAX_KEEPALIVE_CONNECTIONS: ${SSRF_POOL_MAX_KEEPALIVE_CONNECTIONS:-20}
   SSRF_POOL_KEEPALIVE_EXPIRY: ${SSRF_POOL_KEEPALIVE_EXPIRY:-5.0}
-  EXPOSE_NGINX_PORT: ${EXPOSE_NGINX_PORT:-80}
-  EXPOSE_NGINX_SSL_PORT: ${EXPOSE_NGINX_SSL_PORT:-443}
+  EXPOSE_API_PORT: ${EXPOSE_API_PORT:-}
+  EXPOSE_WEB_PORT: ${EXPOSE_WEB_PORT:-}
   POSITION_TOOL_PINS: ${POSITION_TOOL_PINS:-}
   POSITION_TOOL_INCLUDES: ${POSITION_TOOL_INCLUDES:-}
   POSITION_TOOL_EXCLUDES: ${POSITION_TOOL_EXCLUDES:-}
@@ -597,7 +582,7 @@ x-shared-env: &shared-api-worker-env
   EXPOSE_PLUGIN_DEBUGGING_PORT: ${EXPOSE_PLUGIN_DEBUGGING_PORT:-5003}
   PLUGIN_DIFY_INNER_API_KEY: ${PLUGIN_DIFY_INNER_API_KEY:-QaHbTe77CtuXmsfyhR7+vRjI/+XbV1AaFy691iy+kGDv2Jvy0/eAh8Y1}
   PLUGIN_DIFY_INNER_API_URL: ${PLUGIN_DIFY_INNER_API_URL:-http://api:5001}
-  ENDPOINT_URL_TEMPLATE: ${ENDPOINT_URL_TEMPLATE:-http://localhost/e/{hook_id}}
+  ENDPOINT_URL_TEMPLATE: ${ENDPOINT_URL_TEMPLATE:-https://${DIFY_DOMAIN}/e/{hook_id}}
   MARKETPLACE_ENABLED: ${MARKETPLACE_ENABLED:-true}
   MARKETPLACE_API_URL: ${MARKETPLACE_API_URL:-https://marketplace.dify.ai}
   FORCE_VERIFYING_SIGNATURE: ${FORCE_VERIFYING_SIGNATURE:-true}
@@ -746,12 +731,18 @@ services:
     networks:
       - ssrf_proxy_network
       - default
+    ports:
+      - "${EXPOSE_API_PORT:-5001}:5001"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dify-api.rule=Host(`${DIFY_DOMAIN:-localhost}`) && (PathPrefix(`/api`) || PathPrefix(`/console/api`) || PathPrefix(`/v1`) || PathPrefix(`/files`) || PathPrefix(`/mcp`) || PathPrefix(`/triggers`))"
+      - "traefik.http.routers.dify-api.priority=20"
+      - "traefik.http.services.dify-api.loadbalancer.server.port=5001"
 
   # worker service
   # The Celery worker for processing all queues (dataset, workflow, mail, etc.)
   worker:
-    # image: langgenius/dify-api:1.12.0
-    build: ../api
+    image: langgenius/dify-api:1.12.0
     restart: always
     environment:
       # Use the shared environment variables.
@@ -848,6 +839,13 @@ services:
       ENABLE_WEBSITE_JINAREADER: ${ENABLE_WEBSITE_JINAREADER:-true}
       ENABLE_WEBSITE_FIRECRAWL: ${ENABLE_WEBSITE_FIRECRAWL:-true}
       ENABLE_WEBSITE_WATERCRAWL: ${ENABLE_WEBSITE_WATERCRAWL:-true}
+    ports:
+      - "${EXPOSE_WEB_PORT:-3000}:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dify-web.rule=Host(`${DIFY_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.dify-web.priority=1"
+      - "traefik.http.services.dify-web.loadbalancer.server.port=3000"
 
   # The PostgreSQL database.
   db_postgres:
@@ -1013,6 +1011,12 @@ services:
       SENTRY_DSN: ${PLUGIN_SENTRY_DSN:-}
     ports:
       - "${EXPOSE_PLUGIN_DEBUGGING_PORT:-5003}:${PLUGIN_DEBUGGING_PORT:-5003}"
+      - "${EXPOSE_PLUGIN_DAEMON_PORT:-5002}:${PLUGIN_DAEMON_PORT:-5002}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dify-plugin.rule=Host(`${DIFY_DOMAIN:-localhost}`) && PathPrefix(`/e/`)"
+      - "traefik.http.routers.dify-plugin.priority=20"
+      - "traefik.http.services.dify-plugin.loadbalancer.server.port=5002"
     volumes:
       - ./volumes/plugin_daemon:/app/storage
     depends_on:
@@ -1075,50 +1079,6 @@ services:
     entrypoint: ["/docker-entrypoint.sh"]
     command: ["tail", "-f", "/dev/null"]
 
-  # The nginx reverse proxy.
-  # used for reverse proxying the API service and Web service.
-  nginx:
-    image: nginx:latest
-    restart: always
-    volumes:
-      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
-      - ./nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
-      - ./nginx/https.conf.template:/etc/nginx/https.conf.template
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh
-      - ./nginx/ssl:/etc/ssl # cert dir (legacy)
-      - ./volumes/certbot/conf/live:/etc/letsencrypt/live # cert dir (with certbot container)
-      - ./volumes/certbot/conf:/etc/letsencrypt
-      - ./volumes/certbot/www:/var/www/html
-    entrypoint:
-      [
-        "sh",
-        "-c",
-        "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh",
-      ]
-    environment:
-      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
-      NGINX_HTTPS_ENABLED: ${NGINX_HTTPS_ENABLED:-false}
-      NGINX_SSL_PORT: ${NGINX_SSL_PORT:-443}
-      NGINX_PORT: ${NGINX_PORT:-80}
-      # You're required to add your own SSL certificates/keys to the `./nginx/ssl` directory
-      # and modify the env vars below in .env if HTTPS_ENABLED is true.
-      NGINX_SSL_CERT_FILENAME: ${NGINX_SSL_CERT_FILENAME:-dify.crt}
-      NGINX_SSL_CERT_KEY_FILENAME: ${NGINX_SSL_CERT_KEY_FILENAME:-dify.key}
-      NGINX_SSL_PROTOCOLS: ${NGINX_SSL_PROTOCOLS:-TLSv1.2 TLSv1.3}
-      NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-auto}
-      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-100M}
-      NGINX_KEEPALIVE_TIMEOUT: ${NGINX_KEEPALIVE_TIMEOUT:-65}
-      NGINX_PROXY_READ_TIMEOUT: ${NGINX_PROXY_READ_TIMEOUT:-3600s}
-      NGINX_PROXY_SEND_TIMEOUT: ${NGINX_PROXY_SEND_TIMEOUT:-3600s}
-      NGINX_ENABLE_CERTBOT_CHALLENGE: ${NGINX_ENABLE_CERTBOT_CHALLENGE:-false}
-      CERTBOT_DOMAIN: ${CERTBOT_DOMAIN:-}
-    depends_on:
-      - api
-      - web
-    ports:
-      - "${EXPOSE_NGINX_PORT:-80}:${NGINX_PORT:-80}"
-      - "${EXPOSE_NGINX_SSL_PORT:-443}:${NGINX_SSL_PORT:-443}"
 
   # The Weaviate vector store.
   weaviate:
